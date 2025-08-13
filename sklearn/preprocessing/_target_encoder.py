@@ -109,6 +109,13 @@ class TargetEncoder(OneToOneFeatureMixin, _BaseEncoder):
         parameter has no effect.
         Pass an int for reproducible output across multiple function calls.
         See :term:`Glossary <random_state>`.
+        
+    pos_label : str or int, default=None
+        The class to be treated as the positive class when encoding binary targets.
+        Only relevant for binary classification problems. If set, the target `y` will
+        be converted to a binary array where samples equal to `pos_label` are encoded
+        as 1 and all other samples as 0. If ``None``, the raw target values are used
+        without conversion.
 
     Attributes
     ----------
@@ -206,6 +213,7 @@ class TargetEncoder(OneToOneFeatureMixin, _BaseEncoder):
         cv=5,
         shuffle=True,
         random_state=None,
+        pos_label = None
     ):
         self.categories = categories
         self.smooth = smooth
@@ -213,6 +221,7 @@ class TargetEncoder(OneToOneFeatureMixin, _BaseEncoder):
         self.cv = cv
         self.shuffle = shuffle
         self.random_state = random_state
+        self.pos_label = pos_label
 
     @_fit_context(prefer_skip_nested_validation=True)
     def fit(self, X, y):
@@ -375,16 +384,29 @@ class TargetEncoder(OneToOneFeatureMixin, _BaseEncoder):
             self.target_type_ = self.target_type
 
         self.classes_ = None
+
         if self.target_type_ == "binary":
-            label_encoder = LabelEncoder()
-            y = label_encoder.fit_transform(y)
-            self.classes_ = label_encoder.classes_
+            if self.pos_label is not None:
+                unique = np.unique(y)
+                if len(unique) != 2:
+                    raise ValueError(
+                        f"pos_label only supported for binary targets. Found classes: {unique}"
+                    )
+                self.classes_ = unique  
+                y = (y == self.pos_label).astype(int)
+            else:
+                label_encoder = LabelEncoder()
+                y = label_encoder.fit_transform(y)
+                self.classes_ = label_encoder.classes_
+
         elif self.target_type_ == "multiclass":
             label_binarizer = LabelBinarizer()
             y = label_binarizer.fit_transform(y)
             self.classes_ = label_binarizer.classes_
+
         else:  # continuous
             y = _check_y(y, y_numeric=True, estimator=self)
+
 
         self.target_mean_ = np.mean(y, axis=0)
 
